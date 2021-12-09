@@ -33,7 +33,6 @@ class HumanReadableOption(Flag):
 
 def _parse_block_size_and_unit(specs):
     block_size = -1
-    i = 0
     for i in range(len(specs)):
         if i == 1 and specs[i].lower() in ('x', 'o', 'b'):
             continue
@@ -41,8 +40,7 @@ def _parse_block_size_and_unit(specs):
             block_size = int(specs[:i + 1], 0)
         except ValueError:
             return block_size, specs[i:]
-    else:  # No break
-        return block_size, ''
+    return block_size, ''
 
 
 def _parse_size_unit(unit, block_size, opts):

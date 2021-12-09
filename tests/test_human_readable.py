@@ -14,6 +14,7 @@ from pygnuutils.human_readable import parse_specs, HumanReadableOption as HRO, h
     ('2kB', 2000, HRO.B),
     ('2kiB', 2000, HRO.BASE_1024),
     ('5', 5, HRO.CEILING),
+    ('0x10', 16, HRO.CEILING),
     ('0x22kiB', 0x22 * 1000, HRO.BASE_1024),
     ('\'0x2kiB', 2000, HRO.BASE_1024 | HRO.GROUP_DIGITS),
     ('\'0b111GiB', 7000000000, HRO.BASE_1024 | HRO.GROUP_DIGITS),
