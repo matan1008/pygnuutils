@@ -524,8 +524,11 @@ class Ls:
     def _handle_current_dir_entry(self, entry_name, dir_name):
         if self._file_ignored(entry_name):
             return 0
-        entry_stat = self.stub.stat(self.stub.join(dir_name, entry_name), follow_symlinks=False)
-        d_type = FileType.from_st_mode(entry_stat.st_mode)
+        try:
+            entry_stat = self.stub.stat(self.stub.join(dir_name, entry_name), follow_symlinks=False)
+            d_type = FileType.from_st_mode(entry_stat.st_mode)
+        except OSError:
+            d_type = FileType.UNKNOWN
         total_blocks = self._gobble_file(entry_name, d_type, False, dir_name)
         if (self.config.format == Formats.ONE_PER_LINE and self.config.sort_type == SortType.NONE
                 and not self.config.print_block_size and not self.config.recursive):
@@ -834,7 +837,7 @@ class Ls:
         print_buf = self._format_inode(file.stat)
         print_buf += self._format_block_size(file.stat)
         print_buf += file.name
-        print_buf += self._format_type_indicator(file.stat_ok, file.stat.st_mode, file.filetype)
+        print_buf += self._format_type_indicator(file.stat_ok, file.stat.st_mode if file.stat_ok else 0, file.filetype)
         return print_buf
 
     def _format_inode(self, stat):
