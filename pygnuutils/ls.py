@@ -1,14 +1,10 @@
-import fcntl
 import fnmatch
-import grp
 import locale
 import math
 import os
 import platform
-import pwd
 import struct
 import sys
-import termios
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum, auto
@@ -16,6 +12,19 @@ from functools import cmp_to_key
 from itertools import chain
 from stat import filemode, S_ISCHR, S_ISBLK, S_ISREG, S_IXUSR, S_IXGRP, S_IXOTH, S_ISDIR, S_ISLNK, S_ISFIFO, S_ISSOCK, \
     S_ISDOOR
+
+try:
+
+    import pwd
+    import grp
+    import termios
+    import fcntl
+except ImportError:
+    # Not a unix based system.
+    pwd = None
+    grp = None
+    termios = None
+    fcntl = None
 
 from pygnuutils.filevercmp import filevercmp
 from pygnuutils.human_readable import parse_specs, human_readable as human_size, HumanReadableOption
@@ -163,9 +172,13 @@ class LsStub:
         return os.path.basename(path)
 
     def getgroup(self, st_gid):
+        if grp is None:
+            return '?'
         return grp.getgrgid(st_gid).gr_name
 
     def getuser(self, st_uid):
+        if pwd is None:
+            return '?'
         return pwd.getpwuid(st_uid).pw_name
 
     def now(self):
@@ -184,6 +197,8 @@ class LsStub:
         return sys.stdout.isatty()
 
     def get_tty_width(self):
+        if fcntl is None or termios is None:
+            return 80
         cg_win_sz = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, struct.pack('HHHH', 0, 0, 0, 0))
         return struct.unpack('HHHH', cg_win_sz)[1]
 
