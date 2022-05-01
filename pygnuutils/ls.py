@@ -831,7 +831,7 @@ class Ls:
                     column_info[i][idx] = real_length
 
         cols = max_cols - 1
-        for col in range(max_cols - 1, 0, -1):
+        for col in range(max_cols - 1, -1, -1):
             if line_lengths[col] < self.config.line_length:
                 cols = col
                 break
