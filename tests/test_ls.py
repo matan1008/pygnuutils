@@ -35,7 +35,7 @@ def test_single_file_dir_long(tmp_path):
 
 def test_single_file_long(tmp_path):
     now = datetime.datetime.now()
-    file_example = tmp_path / "hello.txt"
+    file_example = tmp_path / 'hello.txt'
     file_example.write_text('hello')
     file_example.chmod(0o664)
     stub = LsTestStub()
@@ -43,6 +43,22 @@ def test_single_file_long(tmp_path):
     ls.run(str(file_example), config=LsConfig(format=Formats.LONG_FORMAT))
     match = re.match(fr'-rw-rw-r-- 1 {getuser()} \w* 5 (.*) {file_example}', stub.stdout.getvalue())
     assert now.replace(second=0, microsecond=0, year=1900) <= datetime.datetime.strptime(match.group(1), '%b %d %H:%M')
+
+
+def test_one_column(tmp_path):
+    file_example = tmp_path / (('a' * 75) + '.txt')
+    file_example.write_text('hello')
+    file_example.chmod(0o664)
+    file_example = tmp_path / 'hello_2.txt'
+    file_example.write_text('hello')
+    file_example.chmod(0o664)
+    stub = LsTestStub()
+    ls = Ls(stub)
+    ls.run(str(tmp_path), config=LsConfig(format=Formats.MANY_PER_LINE, line_length=80))
+    assert stub.stdout.getvalue().splitlines() == [
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt',
+        'hello_2.txt                                                                    '
+    ]
 
 
 def test_multiple_files_dir_long(tmp_path):
