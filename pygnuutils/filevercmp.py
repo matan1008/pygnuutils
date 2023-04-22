@@ -61,8 +61,8 @@ def verrevcmp(s1: str, s2: str):
                 return s1_c - s2_c
             s1 = s1[1:]
             s2 = s2[1:]
-        s1.lstrip('0')
-        s2.lstrip('0')
+        s1 = s1.lstrip('0')
+        s2 = s2.lstrip('0')
         while (s1 and s1[0].isdigit()) and (s2 and s2[0].isdigit()):
             if not first_diff:
                 first_diff = ord(s1[0]) - ord(s2[0])
