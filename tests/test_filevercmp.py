@@ -1,3 +1,5 @@
+from functools import cmp_to_key
+
 from pygnuutils.filevercmp import filevercmp
 
 examples = [
@@ -79,3 +81,16 @@ def test_filevercmp():
                 assert i > j
             else:
                 assert i == j
+
+
+example_with_zeros = [
+    '.', '..', '.001', '.01', '.1', '..001', '..01', '..1', '...', '...001', '...01', '...1', '0', '1~~', '1~', '1',
+    '1.~~', '1.~', '1.', '1.0~', '1.0', '1.1~~', '1.1~', '1.01', '1.1', '1.1a', '1.1b', '1.1pre1', '1.1rc1', '1.1rc2',
+    '1.1-rc1', '1.1-rc2', '1.01.01', '1.01.1', '1.1.01', '1.1.1', '1.1/', '1/', 'a', 'aa', 'aaa', 'aab', 'ab', 'abb',
+    'b'
+]
+
+
+def test_filevercmp_with_zeros():
+    expected = sorted(example_with_zeros, key=cmp_to_key(lambda file1, file2: filevercmp(file1, file2)))
+    assert expected == example_with_zeros
