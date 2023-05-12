@@ -1,6 +1,5 @@
 [![Python application](https://github.com/matan1008/pygnuutils/workflows/Python%20application/badge.svg)](https://github.com/matan1008/pygnuutils/actions/workflows/python-app.yml "Python application action")
 [![Pypi version](https://img.shields.io/pypi/v/pygnuutils.svg)](https://pypi.org/project/pygnuutils/ "PyPi package")
-[![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/matan1008/pygnuutils.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/matan1008/pygnuutils/context:python)
 
 - [Description](#description)
 - [Installation](#installation)
