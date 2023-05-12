@@ -1,6 +1,6 @@
 [project]
 name = "pygnuutils"
-version = "0.0.7"
+version = "0.1.0"
 description = "A python implementation for GNU utils"
 readme = "README.md"
 requires-python = ">=3.7"
