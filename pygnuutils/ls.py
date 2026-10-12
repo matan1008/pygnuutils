@@ -220,6 +220,32 @@ class LsStub:
         return size // self.st_nblocksize + int(size % self.st_nblocksize != 0)
 
 
+class _BlockingIoStub:
+    """ Expose the I/O methods of a blocking stub as coroutine functions that never suspend. """
+
+    def __init__(self, stub):
+        self.stub = stub
+
+    async def stat(self, *args, **kwargs):
+        return self.stub.stat(*args, **kwargs)
+
+    async def readlink(self, *args, **kwargs):
+        return self.stub.readlink(*args, **kwargs)
+
+    async def listdir(self, *args, **kwargs):
+        return self.stub.listdir(*args, **kwargs)
+
+
+def _run_without_suspending(coro):
+    """ Run to completion a coroutine that never suspends, with no event loop involved. """
+    try:
+        coro.send(None)
+    except StopIteration as e:
+        return e.value
+    coro.close()
+    raise RuntimeError('ls suspended, a stub with coroutine functions has to be used with AsyncLs')
+
+
 @dataclass
 class LsConfig:
     ignore_mode: IgnoreMode = IgnoreMode.DEFAULT
@@ -428,10 +454,14 @@ class Ls:
         self.first_print_dir = True
 
     def run(self, *files, config=None):
+        self._io_stub = _BlockingIoStub(self.stub)
+        _run_without_suspending(self._run(*files, config=config))
+
+    async def _run(self, *files, config=None):
         if config is not None:
             self.config = config
         self._reset_run_variables()
-        self._run_on_input_files(files)
+        await self._run_on_input_files(files)
 
         if self.files:
             self._sort_files()
@@ -445,7 +475,7 @@ class Ls:
         elif len(self.pending_dirs) == 1 and len(files) <= 1:
             self.print_dir_name = False
 
-        self._run_on_dirs()
+        await self._run_on_dirs()
 
     # Methods related to the current run.
 
@@ -466,24 +496,24 @@ class Ls:
             else:
                 self.config.dereference = DereferenceSymlink.COMMAND_LINE_SYMLINK_TO_DIR
 
-    def _run_on_input_files(self, files):
+    async def _run_on_input_files(self, files):
         if not files:
             if self.config.immediate_dirs:
-                self._gobble_file('.', FileType.DIRECTORY, True, '')
+                await self._gobble_file('.', FileType.DIRECTORY, True, '')
             else:
                 self.pending_dirs.append(('.', '', True))
         else:
             for file in files:
-                self._gobble_file(file, FileType.UNKNOWN, True, '')
+                await self._gobble_file(file, FileType.UNKNOWN, True, '')
 
-    def _run_on_dirs(self):
+    async def _run_on_dirs(self):
         while self.pending_dirs:
             name, real_name, command_line_arg = self.pending_dirs.pop()
             if self.active_dir_set is not None and not name:
                 di = self.dev_ino_stack.pop()
                 self.active_dir_set.remove(di)
                 continue
-            self._print_dir(name, real_name, command_line_arg)
+            await self._print_dir(name, real_name, command_line_arg)
             self.print_dir_name = True
 
     # Methods related to iterating the current directory.
@@ -501,8 +531,8 @@ class Ls:
         self.minor_device_number_width = 0
         self.file_size_width = 0
 
-    def _print_dir(self, name, realname, command_line_arg):
-        if self._stop_if_dir_visited(name):
+    async def _print_dir(self, name, realname, command_line_arg):
+        if await self._stop_if_dir_visited(name):
             return
         self._clear_current_dir_files()
         if self.config.recursive or self.print_dir_name:
@@ -511,8 +541,8 @@ class Ls:
             self.first_print_dir = False
             self.stub.print(f'{realname if realname else name}:')
         total_blocks = 0
-        for entry_name in chain(('.', '..'), self.stub.listdir(name)):
-            total_blocks += self._handle_current_dir_entry(entry_name, name)
+        for entry_name in chain(('.', '..'), await self._io_stub.listdir(name)):
+            total_blocks += await self._handle_current_dir_entry(entry_name, name)
         self._sort_files()
         if self.config.recursive:
             self._extract_dirs_from_files(name, False)
@@ -524,10 +554,10 @@ class Ls:
         if self.files:
             self._print_current_files()
 
-    def _stop_if_dir_visited(self, name):
+    async def _stop_if_dir_visited(self, name):
         if self.active_dir_set is None:
             return False
-        dir_stat = self.stub.stat(name, follow_symlinks=True)
+        dir_stat = await self._io_stub.stat(name, follow_symlinks=True)
         if (dir_stat.st_dev, dir_stat.st_ino) in self.active_dir_set:
             self.stub.print(f'ls: {name}: not listing already-listed directory')
             return True
@@ -536,15 +566,15 @@ class Ls:
             self.dev_ino_stack.append((dir_stat.st_dev, dir_stat.st_ino))
             return False
 
-    def _handle_current_dir_entry(self, entry_name, dir_name):
+    async def _handle_current_dir_entry(self, entry_name, dir_name):
         if self._file_ignored(entry_name):
             return 0
         try:
-            entry_stat = self.stub.stat(self.stub.join(dir_name, entry_name), follow_symlinks=False)
+            entry_stat = await self._io_stub.stat(self.stub.join(dir_name, entry_name), follow_symlinks=False)
             d_type = FileType.from_st_mode(entry_stat.st_mode)
         except OSError:
             d_type = FileType.UNKNOWN
-        total_blocks = self._gobble_file(entry_name, d_type, False, dir_name)
+        total_blocks = await self._gobble_file(entry_name, d_type, False, dir_name)
         if (self.config.format == Formats.ONE_PER_LINE and self.config.sort_type == SortType.NONE
                 and not self.config.print_block_size and not self.config.recursive):
             self._print_current_files()
@@ -589,7 +619,7 @@ class Ls:
 
     # Methods related to iterating a specific file.
 
-    def _gobble_file(self, name: str, type_: FileType, command_line_arg: bool, dirname: str):
+    async def _gobble_file(self, name: str, type_: FileType, command_line_arg: bool, dirname: str):
         file_info = FileInfo(name)
         file_info.filetype = type_
         if name[0] != self.stub.sep and dirname:
@@ -598,14 +628,14 @@ class Ls:
         file_info.absolute_name = self.stub.abspath(name)
 
         try:
-            file_info.stat = self._stat_with_dereference_config(name, command_line_arg)
+            file_info.stat = await self._stat_with_dereference_config(name, command_line_arg)
         except OSError as e:
             self.stub.print(f'ls: cannot access \'{name}\': {e.strerror}')
             if not command_line_arg:
                 self.files.append(file_info)
             return 0
 
-        self._add_symlink_mode(file_info, name)
+        await self._add_symlink_mode(file_info, name)
         self._add_file_type(file_info, command_line_arg)
 
         if self.config.format == Formats.LONG_FORMAT or self.config.print_block_size:
@@ -620,25 +650,25 @@ class Ls:
         self.files.append(file_info)
         return self.stub.st_nblocks(file_info.stat)
 
-    def _stat_with_dereference_config(self, name, command_line_arg):
+    async def _stat_with_dereference_config(self, name, command_line_arg):
         if self.config.dereference == DereferenceSymlink.ALWAYS:
             do_deref = True
         elif self.config.dereference == DereferenceSymlink.COMMAND_LINE_ARGUMENTS:
             do_deref = command_line_arg
         elif self.config.dereference == DereferenceSymlink.COMMAND_LINE_SYMLINK_TO_DIR:
-            do_deref = command_line_arg and S_ISDIR(self.stub.stat(name).st_mode)
+            do_deref = command_line_arg and S_ISDIR((await self._io_stub.stat(name)).st_mode)
         else:
             do_deref = False
-        return self.stub.stat(name, follow_symlinks=do_deref)
+        return await self._io_stub.stat(name, follow_symlinks=do_deref)
 
-    def _add_symlink_mode(self, file_info, name):
+    async def _add_symlink_mode(self, file_info, name):
         if S_ISLNK(file_info.stat.st_mode) and (self.config.format == Formats.LONG_FORMAT or self.check_symlink_mode):
-            file_info.linkname = self.stub.readlink(name)
+            file_info.linkname = await self._io_stub.readlink(name)
             link_name = file_info.linkname
             if not self.stub.isabs(file_info.linkname):
                 link_name = self.stub.join(self.stub.dirname(name), file_info.linkname)
             if link_name and (self.check_symlink_mode or self.config.indicator_style != IndicatorStyle.NONE):
-                file_info.linkmode = self.stub.stat(link_name).st_mode
+                file_info.linkmode = (await self._io_stub.stat(link_name)).st_mode
 
     def _add_file_type(self, file_info, command_line_arg):
         if S_ISLNK(file_info.stat.st_mode):
@@ -972,3 +1002,22 @@ class Ls:
             one_per_line=one_per_line,
         )
         self.run(*files, config=config)
+
+
+class AsyncLs(Ls):
+    """
+    Ls over a stub whose `stat`, `readlink` and `listdir` are coroutine functions, the rest of it stays synchronous.
+
+    An instance keeps the state of its current run, so don't run it concurrently with itself.
+    """
+
+    def __init__(self, stub):
+        super().__init__(stub)
+
+    async def run(self, *files, config=None):
+        self._io_stub = self.stub
+        await self._run(*files, config=config)
+
+    async def __call__(self, *files, **options):
+        """ Accepts the same options as `Ls.__call__`. """
+        await self.run(*files, config=LsConfig.from_cli_params(self.stub, **options))

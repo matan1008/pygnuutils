@@ -67,3 +67,27 @@ class ReadlinkWatch(LsStub):
 ls = Ls(stub=ReadlinkWatch())
 ls('/tmp', all_=True, long=True)
 ```
+
+If the file system is reached with coroutines, use `AsyncLs`. Its stub implements `stat`, `readlink` and `listdir` as
+coroutine functions, while the rest of the stub stays synchronous:
+
+```python
+import asyncio
+import os
+
+from pygnuutils.ls import AsyncLs, LsStub
+
+
+class AsyncStub(LsStub):
+    async def stat(self, path, dir_fd=None, follow_symlinks=True):
+        return await asyncio.to_thread(os.stat, path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
+    async def readlink(self, path, dir_fd=None):
+        return await asyncio.to_thread(os.readlink, path, dir_fd=dir_fd)
+
+    async def listdir(self, path='.'):
+        return await asyncio.to_thread(os.listdir, path)
+
+
+asyncio.run(AsyncLs(AsyncStub())('/tmp', all_=True, long=True))
+```
